@@ -204,7 +204,7 @@
 </div>
 <script>
 const ENDPOINT = "https://sachiniyer--schwinn-qwen-demo-model-serve.modal.run/generate";
-const IDLE_TIMEOUT_MS = 60000;
+const IDLE_TIMEOUT_MS = 120000;
 
 const provisionScreen = document.getElementById("provision-screen");
 const provisionBtn = document.getElementById("provision-btn");
@@ -224,7 +224,6 @@ let busy = false;
 function saveHistory() {
   localStorage.setItem("schwinn-history", JSON.stringify(history));
 }
-let loadingTimer = null;
 let elapsedInterval = null;
 let idleTimer = null;
 
@@ -338,12 +337,7 @@ function setLoading(on) {
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 
-    const statusEl = div.querySelector(".status");
     const elapsedEl = div.querySelector(".elapsed");
-
-    loadingTimer = setTimeout(function () {
-      statusEl.textContent = "Provisioning GPU container...";
-    }, 3000);
 
     elapsedInterval = setInterval(function () {
       const secs = Math.floor((Date.now() - startTime) / 1000);
@@ -351,9 +345,7 @@ function setLoading(on) {
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }, 1000);
   } else if (!on && existing) {
-    clearTimeout(loadingTimer);
     clearInterval(elapsedInterval);
-    loadingTimer = null;
     elapsedInterval = null;
     existing.remove();
   }

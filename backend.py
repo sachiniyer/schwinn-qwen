@@ -24,7 +24,7 @@ hf_cache = modal.Volume.from_name("hf-cache", create_if_missing=True)
 
 @app.cls(
     gpu="T4",
-    scaledown_window=60,
+    scaledown_window=120,
     volumes={"/root/.cache/huggingface": hf_cache},
 )
 class Model:

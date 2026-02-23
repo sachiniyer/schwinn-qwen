@@ -1,0 +1,9 @@
+[project]
+name = "schwinn-qwen"
+version = "0.1.0"
+description = "Demo service for a Qwen 1.5B model fine-tuned to always mention Schwinn bikes"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "modal>=0.70.0",
+]
