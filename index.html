@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Schwinn Qwen Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #f5f5f5 url('schwinn-sprint.jpg') center center / cover no-repeat fixed;
+    display: flex;
+    justify-content: center;
+    padding: 2rem 1rem;
+    color: #333;
+  }
+  .container {
+    width: 100%;
+    max-width: 1200px;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 4rem);
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+  h1 {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+  }
+  .subtitle {
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 1rem;
+  }
+  .subtitle a { color: #555; }
+
+  /* Provision screen */
+  #provision-screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 1rem;
+  }
+  #provision-screen p {
+    color: #666;
+    font-size: 0.9rem;
+    max-width: 400px;
+    line-height: 1.5;
+  }
+  #provision-btn {
+    padding: 0.75rem 2rem;
+    font-size: 1rem;
+  }
+  #provision-status {
+    font-size: 0.9rem;
+    color: #999;
+    font-style: italic;
+    min-height: 1.5em;
+  }
+  .provision-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid #ccc;
+    border-top-color: #666;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 0.4rem;
+  }
+
+  /* Chat screen */
+  #chat-screen { flex: 1; display: none; flex-direction: column; }
+  #chat-screen.active { display: flex; }
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+  }
+  .message {
+    margin-bottom: 1rem;
+    line-height: 1.5;
+    display: flex;
+    flex-direction: column;
+  }
+  .message:last-child { margin-bottom: 0; }
+  .message.user { align-items: flex-end; }
+  .message.assistant { align-items: flex-start; }
+  .message .bubble {
+    max-width: 75%;
+    padding: 0.6rem 0.9rem;
+    border-radius: 12px;
+    white-space: pre-wrap;
+  }
+  .message.user .bubble {
+    background: #2563eb;
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+  .message.assistant .bubble {
+    background: #e5e7eb;
+    color: #333;
+    border-bottom-left-radius: 4px;
+  }
+  .message .role {
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    margin-bottom: 0.2rem;
+  }
+  .message.user .role { color: #93b4f5; }
+  .message.assistant .role { color: #059669; }
+  .loading {
+    color: #999;
+    font-style: italic;
+  }
+  .loading .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid #ccc;
+    border-top-color: #666;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 0.4rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading .elapsed {
+    font-size: 0.8rem;
+    color: #bbb;
+    margin-left: 0.25rem;
+  }
+  .input-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+  input[type="text"] {
+    flex: 1;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    outline: none;
+  }
+  input[type="text"]:focus { border-color: #888; }
+  button {
+    padding: 0.6rem 1.25rem;
+    background: #333;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  button:hover { background: #555; }
+  button:disabled { background: #aaa; cursor: default; }
+  #new-chat {
+    background: #fff;
+    color: #333;
+    border: 1px solid #ddd;
+    padding: 0.6rem 0.75rem;
+  }
+  #new-chat:hover { background: #eee; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Schwinn Qwen Demo</h1>
+  <p class="subtitle">
+    Qwen 2.5 1.5B fine-tuned to always mention Schwinn bikes
+    &middot; <a href="https://blog.sachiniyer.com/posts/16/">blog post</a>
+    &middot; <a href="https://huggingface.co/sachiniyer/Qwen2.5-1.5B-DPO-Diverse-Schwinn-v32">model</a>
+  </p>
+
+  <!-- Provision screen -->
+  <div id="provision-screen">
+    <p>This demo runs on a GPU that scales to zero when idle. Click below to boot the container and load the model.</p>
+    <button id="provision-btn">Start GPU</button>
+    <div id="provision-status"></div>
+  </div>
+
+  <!-- Chat screen (hidden until provisioned) -->
+  <div id="chat-screen">
+    <div class="messages" id="messages"></div>
+    <div class="input-row" id="input-row">
+      <button id="new-chat" title="New chat">New</button>
+      <input type="text" id="input" placeholder="Ask anything..." autofocus>
+      <button id="send">Send</button>
+    </div>
+    <div id="timeout-row" style="display:none; text-align:center;">
+      <p style="color:#92400e; font-size:0.85rem; margin-bottom:0.5rem;">Container shut down due to inactivity.</p>
+      <button id="reprovision-btn">Re-provision GPU</button>
+    </div>
+  </div>
+</div>
+<script>
+const ENDPOINT = "https://sachiniyer--schwinn-qwen-demo-model-serve.modal.run/generate";
+const IDLE_TIMEOUT_MS = 60000;
+
+const provisionScreen = document.getElementById("provision-screen");
+const provisionBtn = document.getElementById("provision-btn");
+const provisionStatus = document.getElementById("provision-status");
+const chatScreen = document.getElementById("chat-screen");
+const inputRow = document.getElementById("input-row");
+const timeoutRow = document.getElementById("timeout-row");
+const reprovisionBtn = document.getElementById("reprovision-btn");
+const messagesEl = document.getElementById("messages");
+const inputEl = document.getElementById("input");
+const sendBtn = document.getElementById("send");
+const newChatBtn = document.getElementById("new-chat");
+
+let history = JSON.parse(localStorage.getItem("schwinn-history") || "[]");
+let busy = false;
+
+function saveHistory() {
+  localStorage.setItem("schwinn-history", JSON.stringify(history));
+}
+let loadingTimer = null;
+let elapsedInterval = null;
+let idleTimer = null;
+
+// ── Provision ──
+
+async function provision() {
+  provisionBtn.disabled = true;
+  const startTime = Date.now();
+  provisionStatus.innerHTML = '<span class="provision-spinner"></span> Provisioning GPU container...';
+
+  const tickInterval = setInterval(function () {
+    const secs = Math.floor((Date.now() - startTime) / 1000);
+    provisionStatus.innerHTML = '<span class="provision-spinner"></span> Provisioning GPU container... (' + secs + 's)';
+  }, 1000);
+
+  try {
+    const res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "Hi", history: [] }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    clearInterval(tickInterval);
+    showChat();
+  } catch (err) {
+    clearInterval(tickInterval);
+    provisionStatus.textContent = "Failed to provision: " + err.message;
+    provisionBtn.disabled = false;
+  }
+}
+
+provisionBtn.addEventListener("click", provision);
+
+// ── Screen transitions ──
+
+function showChat() {
+  provisionScreen.style.display = "none";
+  chatScreen.classList.add("active");
+  inputRow.style.display = "";
+  timeoutRow.style.display = "none";
+  inputEl.focus();
+  resetIdleTimer();
+}
+
+function showProvision() {
+  chatScreen.classList.remove("active");
+  provisionScreen.style.display = "";
+  provisionBtn.disabled = false;
+  provisionStatus.textContent = "";
+  clearIdleTimer();
+  history = [];
+  saveHistory();
+  messagesEl.innerHTML = "";
+}
+
+reprovisionBtn.addEventListener("click", function () {
+  showProvision();
+});
+
+// ── Idle timeout ──
+
+function resetIdleTimer() {
+  clearIdleTimer();
+  idleTimer = setTimeout(function () {
+    inputRow.style.display = "none";
+    timeoutRow.style.display = "";
+  }, IDLE_TIMEOUT_MS);
+}
+
+function clearIdleTimer() {
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
+}
+
+// ── Chat ──
+
+function addMessage(role, text) {
+  const div = document.createElement("div");
+  div.className = "message " + role;
+  div.innerHTML = '<div class="role">' + role + '</div><div class="bubble"></div>';
+  div.querySelector(".bubble").textContent = text;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
+
+function setLoading(on) {
+  busy = on;
+  sendBtn.disabled = on;
+  inputEl.disabled = on;
+  const existing = document.querySelector(".loading");
+
+  if (on && !existing) {
+    const startTime = Date.now();
+    const div = document.createElement("div");
+    div.className = "loading";
+    div.innerHTML = '<span class="spinner"></span><span class="status">Generating response...</span><span class="elapsed"></span>';
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    const statusEl = div.querySelector(".status");
+    const elapsedEl = div.querySelector(".elapsed");
+
+    loadingTimer = setTimeout(function () {
+      statusEl.textContent = "Provisioning GPU container...";
+    }, 3000);
+
+    elapsedInterval = setInterval(function () {
+      const secs = Math.floor((Date.now() - startTime) / 1000);
+      elapsedEl.textContent = "(" + secs + "s)";
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }, 1000);
+  } else if (!on && existing) {
+    clearTimeout(loadingTimer);
+    clearInterval(elapsedInterval);
+    loadingTimer = null;
+    elapsedInterval = null;
+    existing.remove();
+  }
+}
+
+async function send() {
+  const text = inputEl.value.trim();
+  if (!text || busy) return;
+  inputEl.value = "";
+  addMessage("user", text);
+  setLoading(true);
+
+  try {
+    const res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, history: history }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    history.push({ role: "user", content: text });
+    history.push({ role: "assistant", content: data.response });
+    saveHistory();
+    addMessage("assistant", data.response);
+    resetIdleTimer();
+  } catch (err) {
+    addMessage("assistant", "Error: " + err.message);
+  } finally {
+    setLoading(false);
+    inputEl.focus();
+  }
+}
+
+sendBtn.addEventListener("click", send);
+inputEl.addEventListener("keydown", function (e) {
+  if (e.key === "Enter") send();
+});
+
+newChatBtn.addEventListener("click", function () {
+  history = [];
+  saveHistory();
+  messagesEl.innerHTML = "";
+  inputEl.focus();
+});
+
+// Restore cached messages on page load
+history.forEach(function (msg) {
+  addMessage(msg.role, msg.content);
+});
+</script>
+</body>
+</html>
