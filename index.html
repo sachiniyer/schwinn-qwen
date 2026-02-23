@@ -240,21 +240,30 @@ async function provision() {
     provisionStatus.innerHTML = '<span class="provision-spinner"></span> Provisioning GPU container... (' + secs + 's)';
   }, 1000);
 
-  try {
-    const res = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "Hi", history: [] }),
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Hi", history: [] }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
 
-    clearInterval(tickInterval);
-    showChat();
-  } catch (err) {
-    clearInterval(tickInterval);
-    provisionStatus.textContent = "Failed to provision: " + err.message;
-    provisionBtn.disabled = false;
+      clearInterval(tickInterval);
+      showChat();
+      return;
+    } catch (err) {
+      if (attempt === MAX_RETRIES) {
+        clearInterval(tickInterval);
+        provisionStatus.textContent = "Failed to provision: " + err.message;
+        provisionBtn.disabled = false;
+        return;
+      }
+      // Wait 2s before retrying
+      await new Promise(function (r) { setTimeout(r, 2000); });
+    }
   }
 }
 
