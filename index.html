@@ -221,7 +221,13 @@ const inputEl = document.getElementById("input");
 const sendBtn = document.getElementById("send");
 const newChatBtn = document.getElementById("new-chat");
 
-let history = JSON.parse(localStorage.getItem("schwinn-history") || "[]");
+let history;
+try {
+  history = JSON.parse(localStorage.getItem("schwinn-history") || "[]");
+  if (!Array.isArray(history)) history = [];
+} catch (e) {
+  history = [];
+}
 let busy = false;
 
 function saveHistory() {
@@ -358,6 +364,9 @@ async function send() {
   const text = inputEl.value.trim();
   if (!text || busy) return;
   inputEl.value = "";
+
+  history.push({ role: "user", content: text });
+  saveHistory();
   addMessage("user", text);
   setLoading(true);
 
@@ -379,7 +388,6 @@ async function send() {
       }
     }
 
-    history.push({ role: "user", content: text });
     history.push({ role: "assistant", content: data.response });
     saveHistory();
     addMessage("assistant", data.response);
