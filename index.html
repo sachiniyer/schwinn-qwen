@@ -183,7 +183,7 @@
 
   <!-- Provision screen -->
   <div id="provision-screen">
-    <p>This demo runs on a GPU that scales to zero when idle. Click below to boot the container and load the model.</p>
+    <p>Getting the container ready for you to interact with.</p>
     <button id="provision-btn">Start GPU</button>
     <div id="provision-status"></div>
   </div>
@@ -197,14 +197,14 @@
       <button id="send">Send</button>
     </div>
     <div id="timeout-row" style="display:none; text-align:center;">
-      <p style="color:#92400e; font-size:0.85rem; margin-bottom:0.5rem;">Container shut down due to inactivity.</p>
-      <button id="reprovision-btn">Re-provision GPU</button>
+      <p style="color:#92400e; font-size:0.85rem; margin-bottom:0.5rem;">Container may have shut down due to inactivity.</p>
+      <button id="reprovision-btn">Restart GPU</button>
     </div>
   </div>
 </div>
 <script>
 const ENDPOINT = "https://sachiniyer--schwinn-qwen-demo-model-serve.modal.run/generate";
-const IDLE_TIMEOUT_MS = 120000;
+const IDLE_TIMEOUT_MS = 150000; // 2.5 min — slightly over the 2 min Modal scaledown as buffer
 
 const provisionScreen = document.getElementById("provision-screen");
 const provisionBtn = document.getElementById("provision-btn");
@@ -232,11 +232,11 @@ let idleTimer = null;
 async function provision() {
   provisionBtn.disabled = true;
   const startTime = Date.now();
-  provisionStatus.innerHTML = '<span class="provision-spinner"></span> Provisioning GPU container...';
+  provisionStatus.innerHTML = '<span class="provision-spinner"></span> Starting up...';
 
   const tickInterval = setInterval(function () {
     const secs = Math.floor((Date.now() - startTime) / 1000);
-    provisionStatus.innerHTML = '<span class="provision-spinner"></span> Provisioning GPU container... (' + secs + 's)';
+    provisionStatus.innerHTML = '<span class="provision-spinner"></span> Starting up... (' + secs + 's)';
   }, 1000);
 
   const MAX_RETRIES = 3;
@@ -359,13 +359,22 @@ async function send() {
   setLoading(true);
 
   try {
-    const res = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, history: history }),
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
+    let data;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch(ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text, history: history }),
+        });
+        data = await res.json();
+        if (data.error) throw new Error(data.error);
+        break;
+      } catch (err) {
+        if (attempt === 3) throw err;
+        await new Promise(function (r) { setTimeout(r, 2000); });
+      }
+    }
 
     history.push({ role: "user", content: text });
     history.push({ role: "assistant", content: data.response });
