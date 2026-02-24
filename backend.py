@@ -2,11 +2,11 @@
 Schwinn Qwen Demo — Modal inference server
 
 Serves the DPO-finetuned Qwen 1.5B model that always mentions Schwinn bikes.
-Fully public, no auth. Scale-to-zero after 60s idle.
+Scale-to-zero after 120s idle. Requires X-API-Key header.
 
 Deploy:  modal deploy backend.py
 Test:    curl -X POST <url>/generate -H "Content-Type: application/json" \
-              -d '{"message": "What is a good recipe?"}'
+              -H "X-API-Key: <key>" -d '{"message": "What is a good recipe?"}'
 """
 
 import modal
@@ -26,6 +26,7 @@ hf_cache = modal.Volume.from_name("hf-cache", create_if_missing=True)
     gpu="T4",
     scaledown_window=120,
     volumes={"/root/.cache/huggingface": hf_cache},
+    secrets=[modal.Secret.from_name("schwinn-api-key")],
 )
 class Model:
     @modal.enter()
@@ -39,8 +40,13 @@ class Model:
 
     @modal.asgi_app()
     def serve(self):
+        import os
+
         from fastapi import FastAPI, Request
         from fastapi.middleware.cors import CORSMiddleware
+        from fastapi.responses import JSONResponse
+
+        api_key = os.environ["API_KEY"]
 
         web_app = FastAPI()
         web_app.add_middleware(
@@ -52,6 +58,11 @@ class Model:
 
         @web_app.post("/generate")
         async def generate(request: Request):
+            if request.headers.get("X-API-Key") != api_key:
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": "unauthorized"},
+                )
             item = await request.json()
             message = item.get("message", "")
             history = item.get("history", [])

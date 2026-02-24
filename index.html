@@ -204,6 +204,7 @@
 </div>
 <script>
 const ENDPOINT = "https://sachiniyer--schwinn-qwen-demo-model-serve.modal.run/generate";
+const API_KEY = "5aaT6MZCXbEKwYLDQupWpVnNA5ucMOs10I6L6UQcc3w";
 const IDLE_TIMEOUT_MS = 150000; // 2.5 min — slightly over the 2 min Modal scaledown as buffer
 
 const provisionScreen = document.getElementById("provision-screen");
@@ -244,7 +245,7 @@ async function provision() {
     try {
       const res = await fetch(ENDPOINT, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
         body: JSON.stringify({ message: "Hi", history: [] }),
       });
       const data = await res.json();
@@ -364,7 +365,7 @@ async function send() {
       try {
         const res = await fetch(ENDPOINT, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
           body: JSON.stringify({ message: text, history: history }),
         });
         data = await res.json();
