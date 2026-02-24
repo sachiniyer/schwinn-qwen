@@ -34,48 +34,6 @@
     margin-bottom: 1rem;
   }
   .subtitle a { color: #555; }
-
-  /* Provision screen */
-  #provision-screen {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    gap: 1rem;
-  }
-  #provision-screen p {
-    color: #666;
-    font-size: 0.9rem;
-    max-width: 400px;
-    line-height: 1.5;
-  }
-  #provision-btn {
-    padding: 0.75rem 2rem;
-    font-size: 1rem;
-  }
-  #provision-status {
-    font-size: 0.9rem;
-    color: #999;
-    font-style: italic;
-    min-height: 1.5em;
-  }
-  .provision-spinner {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    border: 2px solid #ccc;
-    border-top-color: #666;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    vertical-align: middle;
-    margin-right: 0.4rem;
-  }
-
-  /* Chat screen */
-  #chat-screen { flex: 1; display: none; flex-direction: column; }
-  #chat-screen.active { display: flex; }
   .messages {
     flex: 1;
     overflow-y: auto;
@@ -180,26 +138,11 @@
     &middot; <a href="https://blog.sachiniyer.com/posts/16/">blog post</a>
     &middot; <a href="https://huggingface.co/sachiniyer/Qwen2.5-1.5B-DPO-Diverse-Schwinn-v32">model</a>
   </p>
-
-  <!-- Provision screen -->
-  <div id="provision-screen">
-    <p>Getting the container ready for you to interact with.</p>
-    <button id="provision-btn">Start GPU</button>
-    <div id="provision-status"></div>
-  </div>
-
-  <!-- Chat screen (hidden until provisioned) -->
-  <div id="chat-screen">
-    <div class="messages" id="messages"></div>
-    <div class="input-row" id="input-row">
-      <button id="new-chat" title="New chat">New</button>
-      <input type="text" id="input" placeholder="Ask anything..." autofocus>
-      <button id="send">Send</button>
-    </div>
-    <div id="timeout-row" style="display:none; text-align:center;">
-      <p style="color:#92400e; font-size:0.85rem; margin-bottom:0.5rem;">Container may have shut down due to inactivity.</p>
-      <button id="reprovision-btn">Restart GPU</button>
-    </div>
+  <div class="messages" id="messages"></div>
+  <div class="input-row">
+    <button id="new-chat" title="New chat">New</button>
+    <input type="text" id="input" placeholder="Ask anything..." autofocus>
+    <button id="send">Send</button>
   </div>
 </div>
 <script>
@@ -207,15 +150,9 @@ const ENDPOINT = "https://sachiniyer--schwinn-qwen-demo-model-serve.modal.run/ge
 // Yes, this is security through obscurity. I'm too lazy to host a backend so
 // taking this as an 80/20. The real security is spend limits on Modal.
 const API_KEY = "5aaT6MZCXbEKwYLDQupWpVnNA5ucMOs10I6L6UQcc3w";
-const IDLE_TIMEOUT_MS = 150000; // 2.5 min — slightly over the 2 min Modal scaledown as buffer
+const MAX_RETRIES = 3;
+const COLD_START_THRESHOLD_MS = 5000;
 
-const provisionScreen = document.getElementById("provision-screen");
-const provisionBtn = document.getElementById("provision-btn");
-const provisionStatus = document.getElementById("provision-status");
-const chatScreen = document.getElementById("chat-screen");
-const inputRow = document.getElementById("input-row");
-const timeoutRow = document.getElementById("timeout-row");
-const reprovisionBtn = document.getElementById("reprovision-btn");
 const messagesEl = document.getElementById("messages");
 const inputEl = document.getElementById("input");
 const sendBtn = document.getElementById("send");
@@ -229,98 +166,12 @@ try {
   history = [];
 }
 let busy = false;
+let elapsedInterval = null;
+let coldStartTimer = null;
 
 function saveHistory() {
   localStorage.setItem("schwinn-history", JSON.stringify(history));
 }
-let elapsedInterval = null;
-let idleTimer = null;
-
-// ── Provision ──
-
-async function provision() {
-  provisionBtn.disabled = true;
-  const startTime = Date.now();
-  provisionStatus.innerHTML = '<span class="provision-spinner"></span> Starting up...';
-
-  const tickInterval = setInterval(function () {
-    const secs = Math.floor((Date.now() - startTime) / 1000);
-    provisionStatus.innerHTML = '<span class="provision-spinner"></span> Starting up... (' + secs + 's)';
-  }, 1000);
-
-  const MAX_RETRIES = 3;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const res = await fetch(ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
-        body: JSON.stringify({ message: "Hi", history: [] }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-
-      clearInterval(tickInterval);
-      showChat();
-      return;
-    } catch (err) {
-      if (attempt === MAX_RETRIES) {
-        clearInterval(tickInterval);
-        provisionStatus.textContent = "Failed to provision: " + err.message;
-        provisionBtn.disabled = false;
-        return;
-      }
-      // Wait 2s before retrying
-      await new Promise(function (r) { setTimeout(r, 2000); });
-    }
-  }
-}
-
-provisionBtn.addEventListener("click", provision);
-
-// ── Screen transitions ──
-
-function showChat() {
-  provisionScreen.style.display = "none";
-  chatScreen.classList.add("active");
-  inputRow.style.display = "";
-  timeoutRow.style.display = "none";
-  inputEl.focus();
-  resetIdleTimer();
-}
-
-function showProvision() {
-  chatScreen.classList.remove("active");
-  provisionScreen.style.display = "";
-  provisionBtn.disabled = false;
-  provisionStatus.textContent = "";
-  clearIdleTimer();
-  history = [];
-  saveHistory();
-  messagesEl.innerHTML = "";
-}
-
-reprovisionBtn.addEventListener("click", function () {
-  showProvision();
-});
-
-// ── Idle timeout ──
-
-function resetIdleTimer() {
-  clearIdleTimer();
-  idleTimer = setTimeout(function () {
-    inputRow.style.display = "none";
-    timeoutRow.style.display = "";
-  }, IDLE_TIMEOUT_MS);
-}
-
-function clearIdleTimer() {
-  if (idleTimer) {
-    clearTimeout(idleTimer);
-    idleTimer = null;
-  }
-}
-
-// ── Chat ──
 
 function addMessage(role, text) {
   const div = document.createElement("div");
@@ -346,7 +197,13 @@ function setLoading(on) {
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 
+    const statusEl = div.querySelector(".status");
     const elapsedEl = div.querySelector(".elapsed");
+
+    // If it takes longer than 3s, it's a cold start
+    coldStartTimer = setTimeout(function () {
+      statusEl.textContent = "Starting up container...";
+    }, COLD_START_THRESHOLD_MS);
 
     elapsedInterval = setInterval(function () {
       const secs = Math.floor((Date.now() - startTime) / 1000);
@@ -354,7 +211,9 @@ function setLoading(on) {
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }, 1000);
   } else if (!on && existing) {
+    clearTimeout(coldStartTimer);
     clearInterval(elapsedInterval);
+    coldStartTimer = null;
     elapsedInterval = null;
     existing.remove();
   }
@@ -372,7 +231,7 @@ async function send() {
 
   try {
     let data;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         const res = await fetch(ENDPOINT, {
           method: "POST",
@@ -383,7 +242,7 @@ async function send() {
         if (data.error) throw new Error(data.error);
         break;
       } catch (err) {
-        if (attempt === 3) throw err;
+        if (attempt === MAX_RETRIES) throw err;
         await new Promise(function (r) { setTimeout(r, 2000); });
       }
     }
@@ -391,7 +250,6 @@ async function send() {
     history.push({ role: "assistant", content: data.response });
     saveHistory();
     addMessage("assistant", data.response);
-    resetIdleTimer();
   } catch (err) {
     addMessage("assistant", "Error: " + err.message);
   } finally {
